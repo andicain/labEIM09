@@ -13,6 +13,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import org.doubango.ngn.events.NgnMessagingEventArgs;
+import org.doubango.ngn.sip.NgnMessagingSession;
 
 import ro.pub.cs.systems.eim.lab09.ngnsip.R;
 import ro.pub.cs.systems.eim.lab09.ngnsip.broadcastreceiver.InstantMessagingBroadcastReceiver;
@@ -37,6 +38,20 @@ public class InstantMessagingActivity extends AppCompatActivity {
             if (VoiceCallActivity.getInstance().getNgnSipService() != null) {
                 String remotePartyUri = SIPAddress;
 
+                NgnMessagingSession instantMessagingSession = NgnMessagingSession.createOutgoingSession(
+                        VoiceCallActivity.getInstance().getNgnSipService().getSipStack(),
+                        remotePartyUri
+                );
+
+                if(!instantMessagingSession.sendTextMessage(messageEditText.getText().toString())) {
+                    Log.e(Constants.TAG, "Failed to send message");
+                } else {
+                    String conversation = conversationTextView.getText().toString();
+                    conversationTextView.setText(conversation + "Me: " + messageEditText.getText().toString() + "\n");
+                    messageEditText.setText("");
+                    Log.d(Constants.TAG, "Succeeded to send message");
+                }
+                NgnMessagingSession.releaseSession(instantMessagingSession);
                 // TODO exercise 11a
                 // - create an NgnMessagingSession instance for each message being transmitted
                 // passing as arguments the SIP stack and the URI of the remote party

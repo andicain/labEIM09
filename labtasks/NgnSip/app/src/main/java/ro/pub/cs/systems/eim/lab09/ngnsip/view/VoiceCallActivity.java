@@ -2,8 +2,8 @@ package ro.pub.cs.systems.eim.lab09.ngnsip.view;
 
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -11,6 +11,9 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import org.doubango.ngn.NgnEngine;
+import org.doubango.ngn.events.NgnInviteEventArgs;
+import org.doubango.ngn.events.NgnRegistrationEventArgs;
+import org.doubango.ngn.media.NgnMediaType;
 import org.doubango.ngn.services.INgnConfigurationService;
 import org.doubango.ngn.services.INgnSipService;
 import org.doubango.ngn.sip.NgnAVSession;
@@ -60,6 +63,11 @@ public class VoiceCallActivity extends AppCompatActivity {
 
         @Override
         public void onClick(View view) {
+            configureStack();
+            if (!startNgnEngine()) {
+                return;
+            }
+            registerSipService();
             // TODO exercise 5a
             // - set the NGN engine parameters via the configureStack() method
             // - start the NGN engine and register the activity to the SIP service
@@ -73,6 +81,7 @@ public class VoiceCallActivity extends AppCompatActivity {
 
         @Override
         public void onClick(View view) {
+            unregisterSipService();
             // TODO exercise 5b
             // unregister the SIP service by invoking the unregisterSipService() method
         }
@@ -94,6 +103,16 @@ public class VoiceCallActivity extends AppCompatActivity {
                 return;
             }
 
+            ngnAVSession = NgnAVSession.createOutgoingSession(
+                    NgnEngine.getInstance().getSipService().getSipStack(),
+                    NgnMediaType.Audio
+            );
+            if (ngnAVSession.makeCall(validUri)) {
+                callStatusTextView.setText(getResources().getString(R.string.calling));
+                Log.d(Constants.TAG, "Call succeeded");
+            } else {
+                Log.d(Constants.TAG, "Call failed");
+            }
             // TODO exercise 7a
             // - create a NgnAVSession by invoking the static method createOutgoingSession
             // passing as arguments the SipStack and the media type (NgnMediaType.Audio)
@@ -108,8 +127,12 @@ public class VoiceCallActivity extends AppCompatActivity {
     private class HangupCallButtonClickListener implements Button.OnClickListener {
 
         @Override
-        public void onClick(View viw) {
+        public void onClick(View view) {
 
+            if (ngnAVSession != null) {
+                ngnAVSession.hangUpCall();
+                Log.d(Constants.TAG, "Hang Up");
+            }
             // TODO exercise 7b
             // this method should check whether the NgnAVSession was previously created
             // hint: use the hangUpCall() method of the NgnAVSession instance
@@ -124,13 +147,24 @@ public class VoiceCallActivity extends AppCompatActivity {
         @Override
         public void onClick(View view) {
             if (ngnAVSession != null) {
-
-                // TODO exercise 10
-                // - get the character from the DTMF edit text
-                // - compute the character code (0-9 for digits, 10 for '*', 11 for '#')
-                // - use the sendDTMF() method of the NgnAVSession instance
-                // - log the result using Logcat
-
+                int character = dtmfEditText.getText().toString().charAt(0);
+                switch (character) {
+                    case '*':
+                        character = 10;
+                        break;
+                    case '#':
+                        character = 11;
+                        break;
+                    default:
+                        if (character >= '0' && character <= '9') {
+                            character -= '0';
+                        }
+                }
+                if (!ngnAVSession.sendDTMF(character)) {
+                    Log.e(Constants.TAG, "Failed to send DTMF " + character);
+                } else {
+                    Log.d(Constants.TAG, "Succeeded to send DTMF " + character);
+                }
             }
         }
 
@@ -235,7 +269,10 @@ public class VoiceCallActivity extends AppCompatActivity {
     }
 
     public void enableRegistrationBroadcastReceiver() {
-
+        registrationBroadcastReceiver = new RegistrationBroadcastReceiver(registrationStatusTextView);
+        registrationIntentFilter = new IntentFilter();
+        registrationIntentFilter.addAction(NgnRegistrationEventArgs.ACTION_REGISTRATION_EVENT);
+        registerReceiver(registrationBroadcastReceiver, registrationIntentFilter);
         // TODO exercise 6a
         // - create a RegistrationBroadcastReceiver instance
         // - create an IntentFilter instance for NgnRegistrationEventArgs.ACTION_REGISTRATION_EVENT action
@@ -244,7 +281,10 @@ public class VoiceCallActivity extends AppCompatActivity {
     }
 
     public void disableRegistrationStateBroadcastReceiver() {
-
+        if (registrationBroadcastReceiver != null) {
+            unregisterReceiver(registrationBroadcastReceiver);
+            registrationBroadcastReceiver = null;
+        }
         // TODO exercise 6b
         // unregister the RegistrationBroadcastReceiver instance
 
@@ -252,6 +292,10 @@ public class VoiceCallActivity extends AppCompatActivity {
 
     public void enableVoiceCallBroadcastReceiver() {
 
+        voiceCallBroadcastReceiver = new VoiceCallBroadcastReceiver(SIPAddressEditText, callStatusTextView);
+        voiceCallIntentFilter = new IntentFilter();
+        voiceCallIntentFilter.addAction(NgnInviteEventArgs.ACTION_INVITE_EVENT);
+        registerReceiver(voiceCallBroadcastReceiver, voiceCallIntentFilter);
         // TODO exercise 8a
         // - create a VoiceCallBroadcastReceiver instance
         // - create an IntentFilter instance for NgnInviteEventArgs.ACTION_INVITE_EVENT action
@@ -261,6 +305,10 @@ public class VoiceCallActivity extends AppCompatActivity {
 
     public void disableVoiceCallBroadcastReceiver() {
 
+        if (voiceCallBroadcastReceiver != null) {
+            unregisterReceiver(voiceCallBroadcastReceiver);
+            voiceCallBroadcastReceiver = null;
+        }
         // TODO exercise 8b
         // unregister the VoiceCallBroadcastReceiver instance
 
